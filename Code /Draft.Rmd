@@ -16,10 +16,11 @@ library(tidyverse)
 library(lubridate)
 library(dplyr)
 library(tidyr)
+library(psych)
 library(here)
 ```
 
-```{r}
+```{r Data Wrangling}
 FI <- read.csv(
   file=here("./Data /Raw /FI_EconomicFreedom.csv"),
   stringsAsFactor = TRUE, 
@@ -38,6 +39,37 @@ FI1 <- FI %>%
          Sound.Money=V40,
          Trade.Fre=V58,
          Regulation=V81) %>% 
+  mutate(Year = as.numeric(as.character(Year))) %>% 
+  mutate(across(-c(iso3, country), as.numeric))
+
+FITested <- read.csv(
+  file=here("./Data /Raw /FI_EconomicFreedom.csv"),
+  stringsAsFactor = FALSE, 
+  header = TRUE, dec = "."
+)
+
+FITested[] <- lapply(FITested, function(col) {
+  if (is.factor(col)) {
+    as.numeric(as.character(col))  # Convert factors to numeric
+  } else {
+    col
+  }
+})  
+
+
+
+FITested1 <- FITested %>%
+  slice(-c(1:4)) %>% 
+  select(X.1:X.4,X.19,X.30,X.39,X.57,X.80) %>%
+  rename(Year=X.1,
+         iso3=X.2,
+         country=X.3,
+         Econ.Freedom=X.4,
+         Govt.Size=X.19,
+         Legal.Property=X.30,
+         Sound.Money=X.39,
+         Trade.Fre=X.57,
+         Regulation=X.80) %>% 
   mutate(Year = as.numeric(as.character(Year))) %>% 
   mutate(across(-c(iso3, country), as.numeric))
 
@@ -178,5 +210,59 @@ summary(Combined4)
 testing1 <- Combined4 %>% 
   filter(Region=="South Asia")
   
+```
+
+```{r Data Information}
+str(Combined4)
+unique(Combined4$country)
+unique(Combined4$Year)
+
+library(dplyr)
+
+# Custom mode function
+get_mode <- function(x) {
+  uniq_x <- unique(x)
+  uniq_x[which.max(tabulate(match(x, uniq_x)))]
+}
+
+# Assuming Combined4 is your dataset
+summary_stats <- Combined4 %>%
+  summarise(across(where(is.numeric), list(
+    mean = ~mean(., na.rm = TRUE),
+    median = ~median(., na.rm = TRUE),
+    sd = ~sd(., na.rm = TRUE),
+    range = ~max(., na.rm = TRUE) - min(., na.rm = TRUE)
+  ), .names = "{col}_{fn}"))
+
+# Add mode to the summary for numeric columns
+mode_stats <- Combined4 %>%
+  summarise(across(where(is.numeric), list(mode = ~get_mode(.)), .names = "{col}_mode"))
+
+# Combine all statistics into one table
+final_summary <- bind_cols(summary_stats, mode_stats)
+
+# Print the final summary table
+print(final_summary)
+
+```
+
+```{r}
+
+# Summarize by country, calculating mean for numeric variables and mode for factors
+Data <- Combined4 %>%
+  group_by(country) %>%
+  summarise(
+    # Apply mean to numeric columns
+    across(where(is.numeric), mean, na.rm = TRUE),
+    
+    # Apply mode (first value or most frequent) to factor columns
+    across(where(is.factor), get_mode)
+  ) %>% 
+  select(-Year) %>% 
+  select(country,iso3,regional_code,Region,Income.group,continent,everything())
+```
+
+```{r}
+
 ```
 
