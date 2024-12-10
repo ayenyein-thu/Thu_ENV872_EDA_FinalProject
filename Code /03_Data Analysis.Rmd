@@ -1,0 +1,219 @@
+---
+title: "Data Analysis"
+author: "Aye Nyein Thu"
+date: "2024-12-10"
+output:
+  pdf_document: default
+  html_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+#Load packages 
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(tidyr)
+library(psych) #install.packages("psych") if not installed yet
+library(knitr)
+library(kableExtra)
+library(plm)
+library(car)
+library(lmerTest)
+library(leaflet)     
+library(rnaturalearth)  
+library(corrplot)
+library(ggridges)
+library(viridis)
+library(RColorBrewer)
+library(colormap)
+library(ggthemes)
+library(jtools) #install.packages("jtools") if not installed yet
+library(ggcorrplot) #install.packages("ggcorrplot") if not installed yet
+library(GGally)
+library(stargazer)
+library(here)
+
+#Check the working directory
+here()
+getwd()
+
+#Set ggplot theme
+mytheme <- theme_classic() + 
+  theme(
+    axis.text = element_text(color = "black"),
+    legend.position = "top",
+  )
+theme_set(mytheme)
+```
+
+```{r Importing Data}
+#Import the panel dataset 
+Ins_Panel <- read.csv(file="./Data /Processed /Combined_dropNA.csv",
+                     stringsAsFactors = TRUE) %>%
+  mutate(across(c(Year, Population, Area, Landlocked), as.numeric)) 
+
+#Import the cross-sectional dataset 
+Ins_Cs <- read.csv(file="./Data /Processed /Ins_Cs.csv",
+                     stringsAsFactors = TRUE) %>%
+  mutate(across(c(Area, Landlocked), as.numeric)) 
+```
+
+```{r Linear Model}
+#Poverty Headcount 
+#Run the linear model
+LM_Poverty <- lm(data = Ins_Panel,
+             Poverty.Headcount ~ 
+               lag(Gov.Expense) + log(Population) + Landlocked + log(Area) + 
+               Governance + Econ.Freedom)
+
+#Produce summary
+#summary(LM_Poverty) #produce summary regression outputs
+summ(LM_Poverty, digits = 3) #turn summary regression results to a table
+
+#Conduct Multicollinearity using VIF test 
+vif(LM_Poverty)
+
+#Plot regression results
+par(mfrow=c(2,2),mar=c(4,4,4,4))
+plot(LM_Poverty)
+par(mfrow = c(1,1))
+
+#Growth (GDP per capita)
+#Run the linear model
+LM_Growth <- lm(data = Ins_Panel,
+             log(GDP.Capita) ~ 
+               lag(Gov.Expense) + log(Population) + Landlocked + log(Area) + 
+               Governance + Econ.Freedom)
+
+#Produce summary
+#summary(LM_Growth) #produce summary regression outputs
+summ(LM_Growth, digits = 3) #turn summary regression results to a table
+
+#Plot regression results
+par(mfrow=c(2,2),mar=c(4,4,4,4))
+plot(LM_Growth)
+par(mfrow = c(1,1))
+
+#Development (HDI)
+#Run the linear model
+LM_HDI <- lm(data = Ins_Panel,
+             HDI ~ 
+               lag(Gov.Expense) + log(Population) + Landlocked + log(Area) + 
+               Governance + Econ.Freedom)
+
+#Produce summary
+#summary(LM_HDI) #produce summary regression outputs
+summ(LM_HDI, digits = 3) #turn summary regression results to a table
+
+#Plot regression results
+par(mfrow=c(2,2),mar=c(4,4,4,4))
+plot(LM_HDI)
+par(mfrow = c(1,1))
+
+```
+
+```{r Fixed or Random Effects Model}
+#Poverty
+#Run the fixed effects model 
+FE_Poverty <- plm(data=Ins_Panel,
+                  Poverty.Headcount ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="within")
+
+#Run the random effects model 
+RE_Poverty <- plm(data=Ins_Panel,
+                  Poverty.Headcount ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="random")
+
+#Conduct Hausman Test 
+phtest(FE_Poverty, RE_Poverty)
+
+#Growth (GDP per capita)
+#Run the fixed effects model 
+FE_Growth <- plm(data=Ins_Panel,
+                  log(GDP.Capita) ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="within")
+
+#Run the random effects model 
+RE_Growth <- plm(data=Ins_Panel,
+                  log(GDP.Capita) ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="random")
+
+#Conduct Hausman Test 
+phtest(FE_Growth, RE_Growth)
+
+#Development (HDI)
+#Run the fixed effects model 
+FE_Dev <- plm(data=Ins_Panel,
+                  HDI ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="within")
+
+#Run the random effects model 
+RE_Dev <- plm(data=Ins_Panel,
+                  HDI ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="random")
+
+#Conduct Hausman Test 
+phtest(FE_Dev, RE_Dev)
+
+#Combine regression results in a table 
+stargazer(FE_Poverty, FE_Growth, FE_Dev,
+          type = "html",
+          column.labels = c("Poverty Headcount", "GDP.Capita", "HDI"),
+          title = "Panel Regression Results",
+          digits = 3,
+          single.row = TRUE,
+          header = FALSE)
+
+plot(FE_Poverty)
+
+# Extract fitted values and residuals
+fitted_values <- as.vector(fitted(FE_Dev))
+residuals_values <- as.vector(residuals(FE_Dev))
+
+# Set up the plotting layout for 2x2 grid
+par(mfrow = c(2, 2), mar = c(3, 3, 2, 2))
+
+# Plot 1: Residuals vs Fitted values
+plot(fitted_values, residuals_values,
+     main = "Residuals vs Fitted",
+     xlab = "Fitted Values", ylab = "Residuals",
+     pch = 20, col = "blue")
+abline(h = 0, col = "red") 
+
+
+# Plot 2: Normal Q-Q plot for residuals
+qqnorm(residuals_values, main = "Normal Q-Q Plot")
+qqline(residuals_values, col = "red")
+
+# Plot 3: Histogram of residuals
+hist(residuals_values, breaks = 30, col = "gray", 
+     main = "Histogram of Residuals", xlab = "Residuals")
+
+# Plot 4: Scale-Location plot (Square root of standardized residuals vs fitted values)
+standardized_residuals <- residuals_values / sd(residuals_values)
+plot(fitted_values, sqrt(abs(standardized_residuals)),
+     main = "Scale-Location",
+     xlab = "Fitted Values", ylab = "Square Root of |Standardized Residuals|",
+     pch = 20, col = "blue")
+```
+
