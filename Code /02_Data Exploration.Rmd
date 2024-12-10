@@ -63,6 +63,11 @@ Ins_Cs <- Ins_Panel %>%
   select(-Year) %>% #remove year as it is no longer relevant
   select(Country,Country.Code,
          Regional.Code:Income.Group,everything()) #rearrange columns 
+
+#Save the Cross-sectional data in the processed folder 
+write.csv(Ins_Cs,
+          file = ("./Data /Processed /Ins_Cs.csv"),
+          row.names = FALSE)
 ```
 
 ```{r Data Structure, message=FALSE, warning=FALSE}
@@ -238,6 +243,27 @@ ggplot(Institutions_Long, aes(x = Econ.Freedom, y = Value)) +
     strip.text = element_text(size = 12, face = "bold"),  
     axis.title = element_text(size = 12),
     axis.text = element_text(size = 10)
+  )
+```
+
+```{r Correlation Plot}
+#Correlation Plot
+Data_Cor <- Ins_Cs %>% 
+  select(Poverty.Headcount, GDP.Capita, HDI,
+         Gov.Expense, Population, Landlocked, Area, 
+         Governance, Econ.Freedom)
+
+Correlation <-  cor(Data_Cor)
+ggpairs(Data_Cor) + 
+  labs(title = "Correlation Analysis") + 
+  theme_gray() + 
+    theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    strip.text = element_text(size = 8),   
+    axis.text = element_text(size = 8),  
+    axis.title = element_text(size = 8),  
+    legend.text = element_text(size = 8),  
+    legend.title = element_text(size = 8)  
   )
 ```
 
