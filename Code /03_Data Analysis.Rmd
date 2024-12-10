@@ -184,8 +184,6 @@ stargazer(FE_Poverty, FE_Growth, FE_Dev,
           single.row = TRUE,
           header = FALSE)
 
-plot(FE_Poverty)
-
 # Extract fitted values and residuals
 fitted_values <- as.vector(fitted(FE_Dev))
 residuals_values <- as.vector(residuals(FE_Dev))
@@ -199,7 +197,6 @@ plot(fitted_values, residuals_values,
      xlab = "Fitted Values", ylab = "Residuals",
      pch = 20, col = "blue")
 abline(h = 0, col = "red") 
-
 
 # Plot 2: Normal Q-Q plot for residuals
 qqnorm(residuals_values, main = "Normal Q-Q Plot")

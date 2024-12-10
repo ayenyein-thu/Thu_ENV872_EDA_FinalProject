@@ -36,8 +36,8 @@ EconIns_Processed <- EconIns %>%
   slice(-c(1:4)) %>% 
   select(X.1:X.4,X.19,X.30,X.39,X.57,X.80) %>%
   rename(Year=X.1,
-         Country_Code=X.2,
-         Country=X.3,
+         iso3=X.2,
+         country=X.3,
          Econ.Freedom=X.4,
          Govt.Size=X.19,
          Legal.Property=X.30,
@@ -46,12 +46,6 @@ EconIns_Processed <- EconIns %>%
          Regulation=X.80) %>% 
   mutate(across(-c(iso3, country), as.numeric)) %>% 
   mutate(across(c(iso3, country), as.factor))
-
-# write.csv (
-  EconIns_Processed,
-  file=here("./Data /Processed /EconIns_Processed.csv"),
-  row.names = FALSE
-)
 
 Geo <- read.csv(
   file=here("./Data /Raw /CEPII_GeographicClassification.csv"),
@@ -437,5 +431,35 @@ ggplot(Institutions_Long, aes(x = Econ.Freedom, y = Value)) +
     plot.title = element_text(size = 16, hjust = 0.5),  # Center and size the plot title
     axis.title = element_text(size = 12)  # Adjust axis titles
   )
+```
+
+```{r Testing}
+# Regional Comparison
+AA_Poverty <- Ins_Cs %>%
+  filter(Continent %in% c("Africa", "Asia")) %>%
+  lm(formula = HDI ~  
+       lag(Gov.Expense) + log(Population) + Landlocked + log(Area) +
+       Governance + Econ.Freedom, 
+     data = .)
+
+summary(AA_Poverty)
+
+AEP_Poverty <- Ins_Cs %>%
+  filter(Continent %in% c("America", "Europe", "Pacific")) %>%
+  lm(formula = HDI ~  
+       lag(Gov.Expense) + log(Population) + Landlocked + log(Area) +
+       Governance + Econ.Freedom, 
+     data = .)
+
+summary(AEP_Poverty)
+
+AEP_Poverty <- Ins_Cs %>%
+  filter(Continent %in% c("Africa")) %>%
+  lm(formula = HDI ~  
+       lag(Gov.Expense) + log(Population) + Landlocked + log(Area) +
+       Governance + Econ.Freedom, 
+     data = .)
+
+summary(AEP_Poverty)
 ```
 

@@ -1,0 +1,658 @@
+---
+title: "Combined Code"
+author: "Aye Nyein Thu"
+date: "2024-12-10"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+#Initial Setup
+```{r setup, include=FALSE, warning=FALSE}
+#Set the working directory
+getwd()
+
+#Load packages 
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(tidyr)
+library(psych) #install.packages("psych") if not installed yet
+library(knitr)
+library(kableExtra)
+library(plm)
+library(car)
+library(lmerTest)
+library(leaflet)     
+library(rnaturalearth)  
+library(corrplot)
+library(ggridges)
+library(viridis)
+library(RColorBrewer)
+library(colormap)
+library(ggthemes)
+library(jtools) #install.packages("jtools") if not installed yet
+library(ggcorrplot) #install.packages("ggcorrplot") if not installed yet
+library(GGally)
+library(stargazer)
+library(here)
+
+#Set ggplot theme
+mytheme <- theme_classic() + 
+  theme(
+    axis.text = element_text(color = "black"),
+    legend.position = "top",
+  )
+theme_set(mytheme)
+```
+
+#Data Wrangling
+```{r Data Importing and Initial Wrangling, include=FALSE, warning=FALSE}
+#Raw Data 1: Fraser Institute's Economic Freedom Index 
+#Import data
+EconIns <- read.csv (file = here("./Data /Raw /FI_EconomicFreedom.csv"),
+  stringsAsFactor = FALSE) #keep FALSE to avoid decimals counted as factors
+
+#Clean data
+EconIns_Processed <- EconIns %>%
+  slice(-c(1:4)) %>% 
+  select(X.1:X.4,X.19,X.30,X.39,X.57,X.80) %>%
+  rename(Year = X.1,
+         Country.Code = X.2,
+         Country = X.3,
+         Econ.Freedom = X.4,
+         Govt.Size = X.19,
+         Legal.Property = X.30,
+         Sound.Money = X.39,
+         Trade.Free = X.57,
+         Regulation = X.80) %>% 
+  mutate(across(-c(Country.Code, Country), as.numeric)) %>% #change from characters to numeric
+  mutate(across(c(Country.Code, Country), as.factor)) #change from characters to factors
+
+#Save to processed folder
+write.csv(EconIns_Processed,
+          file = ("./Data /Processed /EconIns_Processed.csv"),
+          row.names = FALSE)
+
+#Raw Data 2: CEPII's Geographic Data
+#Import data
+Geo <- read.csv (file = here("./Data /Raw /CEPII_GeographicClassification.csv"),
+  stringsAsFactor = TRUE)
+
+#Clean data 
+Geo_Processed <- Geo %>% 
+  select(iso3,country,continent,area,landlocked,lat,lon) %>% 
+  distinct(iso3, .keep_all = TRUE) %>% 
+  rename(Country.Code = iso3,
+         Country = country,
+         Continent = continent,
+         Area = area,
+         Landlocked = landlocked,
+         Lat = lat, Lon = lon) %>% 
+  mutate(across(-c(Country.Code, Country, Continent), as.numeric))
+
+#Save to processed folder 
+write.csv(Geo_Processed,
+          file = ("./Data /Processed /Geo_Processed.csv"),
+          row.names = FALSE)
+
+#Raw Data 3: World Bank's World Governance Indicators 
+#Import data
+Gov <- read.csv(file = here("./Data /Raw /WB_WorldGovernance.csv"),
+  stringsAsFactors = FALSE) #keep FALSE to avoid decimals counted as factors
+
+#Clean data 
+Gov_Processed <- Gov %>%
+  slice(-c(5137:5178)) %>% 
+  select(1:3,5,11,17,23,29,35) %>% 
+  rename(Country = Country.Name,
+         Year = Time,
+         Corruption = Control.of.Corruption..Estimate..CC.EST.,
+         Govt.Effectiveness = Government.Effectiveness..Estimate..GE.EST.,
+         Political.Stability = Political.Stability.and.Absence.of.Violence.Terrorism..Estimate..PV.EST.,
+         Voice.Accountability = Voice.and.Accountability..Estimate..VA.EST.,
+         RuleofLaw = Rule.of.Law..Estimate..RL.EST.,
+         Regulatory = Regulatory.Quality..Estimate..RQ.EST.) %>% 
+  mutate(across(-c(Country.Code, Country), as.numeric)) %>% 
+  mutate(across(c(Country.Code, Country), as.factor)) 
+
+#Save to processed folder 
+write.csv(Gov_Processed,
+          file = ("./Data /Processed /Gov_Processed.csv"),
+          row.names = FALSE)
+
+#Raw Data 4: UNDP's Human Development Indicators (HDI)
+#Import data
+HDI <- read.csv (file = here("./Data /Raw /UNDP_HDI.csv"),
+       stringsAsFactor = TRUE)
+
+#Clean data 
+HDI_Processed <- HDI %>%
+  select(iso3, country, hdi_1990:hdi_2022) %>%
+  rename_with(~ sub("hdi_", "", .), starts_with("hdi_")) %>%  #remove "hdi_" 
+  pivot_longer(
+    cols = `1990`:`2022`,  #change to panel data format using pivot longer
+    names_to = "Year", values_to = "HDI") %>%
+  rename(Country.Code = iso3, Country = country) %>% 
+  mutate(Year = as.numeric(Year))  
+
+#Save to processed folder 
+write.csv(HDI_Processed,
+          file = ("./Data /Processed /HDI_Processed.csv"),
+          row.names = FALSE)
+
+#Raw Data 5: World Bank's Income Classification
+#Import data
+WBClassify <- read.csv (
+  file = here("./Data /Raw /WB_CountriesClassification_2024.csv"),
+  stringsAsFactor = TRUE)
+
+#Clean data 
+WBClassify_Processed <- WBClassify %>% 
+  select(Economy,Code,Region,Income.group) %>% 
+  rename(Country = Economy,Country.Code = Code,Income.Group = Income.group) %>%
+  mutate(Regional.Code = case_when(
+      Region == "Latin America & Caribbean" ~ "LAC",
+      Region == "South Asia" ~ "SA",
+      Region == "Sub-Saharan Africa" ~ "SSA",
+      Region == "Europe & Central Asia" ~ "ECA",
+      Region == "Middle East & North Africa" ~ "MENA",
+      Region == "East Asia & Pacific" ~ "EAP",
+      Region == "North America" ~ "NAC")) %>% 
+  slice(-c(219:265)) %>% 
+  mutate(Regional.Code=as.factor(Regional.Code))
+
+#Save to processed folder 
+write.csv(WBClassify_Processed,
+          file = ("./Data /Processed /WBClassify_Processed.csv"),
+          row.names = FALSE)
+
+#Raw Data 6: World Bank's Poverty and Inequality Platform (PIP)
+#Import data
+WBPIP <- read.csv (file=here("./Data /Raw /WB_PovertyInequalityPlatform.csv"),
+       stringsAsFactor = TRUE)
+
+#Clean data 
+WBPIP_Processed <- WBPIP %>% 
+  filter(reporting_level == "national") %>% 
+  select(country_name,country_code,reporting_year,headcount,poverty_gap,
+         poverty_severity) %>% 
+  rename(Country = country_name,
+         Country.Code = country_code,
+         Year = reporting_year,
+         Poverty.Headcount = headcount,
+         Poverty.Gap = poverty_gap,
+         Poverty.Severity = poverty_severity) %>% 
+  mutate(Year = as.numeric(Year))
+
+#Save to processed folder 
+write.csv(WBPIP_Processed ,
+          file = ("./Data /Processed /WBPIP_Processed.csv"),
+          row.names = FALSE)
+
+#Raw Data 7: World Development Indicators
+#Import data
+WDI <- read.csv(file=here("./Data /Raw /WDI_GrowthPopulation.csv"),
+       stringsAsFactors = FALSE)
+
+#Clean data 
+WDI_Processed <- WDI %>% 
+  select(-Time.Code) %>% 
+  slice(-c(13889:17049)) %>% 
+  mutate_all(~replace(., . == "..", NA)) %>% #replace ".,.." with NA
+  rename(Country = Country.Name,
+         Year = Time,
+         RealGDP = GDP..constant.2015.US....NY.GDP.MKTP.KD.,
+         GDP.Growth = GDP.growth..annual.....NY.GDP.MKTP.KD.ZG.,
+         GDP.Capita = GDP.per.capita..constant.2015.US....NY.GDP.PCAP.KD.,
+         Trade.Open = Trade....of.GDP...NE.TRD.GNFS.ZS.,
+         Health.Exp = Current.health.expenditure....of.GDP...SH.XPD.CHEX.GD.ZS.,
+         Education.Exp = Government.expenditure.on.education..total....of.GDP...SE.XPD.TOTL.GD.ZS.,
+         Population.Growth = Population.growth..annual.....SP.POP.GROW.,
+         Population.Density = Population.density..people.per.sq..km.of.land.area...EN.POP.DNST.,
+         Population = Population..total..SP.POP.TOTL.) %>% 
+  mutate(across(-c(Country.Code, Country), as.numeric)) %>% 
+  mutate(across(c(Country.Code, Country), as.factor))
+
+#Save to processed folder 
+write.csv(WDI_Processed,
+          file = ("./Data /Processed /WDI_Processed.csv"),
+          row.names = FALSE)
+```
+
+```{r Family Data Wrangling, include=FALSE, warning=FALSE}
+#Combine 7 processed datasets 
+Combined <- WBPIP_Processed %>% 
+  left_join(HDI_Processed, by=c("Country.Code","Year")) %>% 
+  left_join(WDI_Processed, by=c("Country.Code","Year")) %>%
+  left_join(Gov_Processed, by=c("Country.Code","Year")) %>%
+  left_join(EconIns_Processed, by=c("Country.Code","Year")) %>%
+  left_join(Geo_Processed, by=c("Country.Code")) %>%
+  left_join(WBClassify_Processed, by=c("Country.Code")) %>%
+  select (-Country.y,-Country.x.x,-Country.y.y,-Country.x.x.x,
+          -Country.y.y.y,-Country) %>%
+  rename (Country=Country.x) %>% 
+  mutate(
+    Governance = rowMeans(select(., Corruption:Voice.Accountability), 
+                          na.rm = TRUE), #find the mean of governance indicators
+  Gov.Expense = Health.Exp + Education.Exp) %>% #add governance expenditure
+  select(Country:Year,Regional.Code,Region,Continent,
+         Income.Group,Poverty.Headcount:Trade.Open,Gov.Expense,
+         Health.Exp:Population,Governance,Corruption:Lon) 
+
+#Filter the common years for all dataset 
+Combined_CommonYear <- Combined %>% 
+  filter(Year >= 1996 & Year <= 2021) 
+
+#Drop all N/A values 
+Combined_dropNA <- Combined_CommonYear %>% 
+  drop_na()
+
+#Save combined files in the processed folder
+write.csv(Combined,
+          file = ("./Data /Processed /Combined.csv"),
+          row.names = FALSE)
+
+write.csv(Combined_CommonYear,
+          file = ("./Data /Processed /Combined_CommonYear.csv"),
+          row.names = FALSE)
+
+write.csv(Combined_dropNA,
+          file = ("./Data /Processed /Combined_dropNA.csv"),
+          row.names = FALSE)
+```
+
+#Data Wrangling
+```{r Loading Data and Initial Data Exploration, warning=FALSE, message=FALSE}
+#Import cleaned data without NA excluded
+Ins_CommonYear <- read.csv(file="./Data /Processed /Combined_CommonYear.csv",
+                     stringsAsFactors = TRUE) %>%
+  mutate(across(c(Year, Population, Area, Landlocked), as.numeric))
+
+#Import cleaned data with NA excluded
+Ins_Panel <- read.csv(file="./Data /Processed /Combined_dropNA.csv",
+                     stringsAsFactors = TRUE) %>%
+  mutate(across(c(Year, Population, Area, Landlocked), as.numeric)) 
+
+#Change to Cross-sectional data by taking yearly average
+Ins_Cs <- Ins_Panel %>%
+  group_by(Country, Country.Code) %>%
+  summarise(
+    across(where(is.numeric), mean, na.rm = TRUE), #return mean for numeric
+    across(where(is.factor), ~ first(.)), #return first value for factor
+  ) %>% 
+  select(-Year) %>% #remove year as it is no longer relevant
+  select(Country,Country.Code,
+         Regional.Code:Income.Group,everything()) #rearrange columns 
+
+#Save the Cross-sectional data in the processed folder 
+write.csv(Ins_Cs,
+          file = ("./Data /Processed /Ins_Cs.csv"),
+          row.names = FALSE)
+```
+
+```{r Data Structure, message=FALSE, warning=FALSE}
+#Check the data structure 
+dim(Ins_Cs)
+summary(Ins_Cs)
+```
+
+```{r Summary Statistics}
+#Find summary statistics of variables used 
+Summary <- Ins_Panel %>% 
+  select(Poverty.Headcount,GDP.Capita,HDI,
+         Gov.Expense,Population,Area,
+         Governance,Econ.Freedom) %>% 
+  summarise(across(everything(), list(
+    count = ~sum(!is.na(.)),
+    mean = ~mean(., na.rm = TRUE),
+    sd = ~sd(., na.rm = TRUE),
+    min = ~min(., na.rm = TRUE),
+    max = ~max(., na.rm = TRUE),
+    range = ~diff(range(., na.rm = TRUE)),
+    se = ~sd(., na.rm = TRUE) / sqrt(sum(!is.na(.)))
+  )))
+
+#Format the summary statistics in a 
+Summary_Formatted <- Summary %>%
+  pivot_longer(everything(), 
+               names_to = c("variable", "statistic"), 
+               names_sep = "_") %>%
+  pivot_wider(names_from = statistic, values_from = value) 
+
+Summary_Formatted %>%
+  kable("latex", booktabs = TRUE) %>%
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+```{r Overview of Institutions, warning = FALSE, message=FALSE}
+#Overview of Governance in the countries under study
+#Retrieve world geographic data and change to sf format 
+World <- ne_countries(returnclass = "sf") 
+
+#Join the cleaned data with geographic data by country code 
+Map_Data <- World %>%
+  left_join(Ins_Cs, by = c("iso_a3" = "Country.Code"))
+
+#Set the color palette 
+Pal.Gov <- colorNumeric(palette = "RdYlBu", domain = Map_Data$Governance)
+
+#Plot Governance of the countries under study
+leaflet(Map_Data) %>%
+  addTiles() %>% 
+  addPolygons(
+    fillColor = ~Pal.Gov(Governance),  
+    fillOpacity = 0.7,
+    color = "white",
+    weight = 1,
+    popup = ~paste(name, "<br>Governance: ", Governance) 
+  ) %>%
+  addLegend(
+    position = "bottomright",
+    pal = Pal.Gov, 
+    values = ~Governance,
+    title = "Governance",
+    opacity = 0.7
+  )
+
+#Overview of Economic Freedom in the Countries under Study
+#Set the color palette 
+Pal.Econ <- colorNumeric(palette = "YlGnBu", domain = Map_Data$Econ.Freedom)
+
+#Plot Economic Freedom of the countries under study
+leaflet(Map_Data) %>%
+  addTiles() %>% 
+  addPolygons(
+    fillColor = ~Pal.Econ(Econ.Freedom),  
+    fillOpacity = 0.7,
+    color = "white",
+    weight = 1,
+    popup = ~paste(name, "<br>Econ.Freedom: ", Econ.Freedom) 
+  ) %>%
+  addLegend(
+    position = "bottomright",
+    pal = Pal.Econ,  
+    values = ~Econ.Freedom,
+    title = "Economic Freedom",
+    opacity = 0.7
+  )
+```
+
+```{r Relationship of Main Variables, warning = FALSE, message=FALSE}
+#Plot the relationship between Poverty and Governance across regions
+ggplot(Ins_Cs, aes(x = Governance, y = Poverty.Headcount, fill = Continent)) +
+  geom_point(shape = 21, size = 3, color = "black", stroke = 0.5, alpha = 0.7) +  
+  geom_smooth(method = "lm", se = FALSE, color = "red", linetype = "dashed") + 
+  scale_fill_brewer(palette = "Set2") +  
+  labs(
+    title = "Poverty vs. Governance by Regions",
+    x = "Governance",
+    y = "Poverty Headcount"
+  ) +
+  facet_wrap(~Continent, scales = "free") + 
+  #theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    strip.text = element_text(size = 12, face = "bold"),  
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    legend.position = "none" 
+  )
+
+#Plot the relationship between Growth and Governance across regions
+ggplot(Ins_Cs, aes(x = Governance, y = GDP.Capita, fill = Continent)) +
+  geom_point(shape = 21, size = 3, color = "black", stroke = 0.5, alpha = 0.7) +  
+  geom_smooth(method = "lm", se = FALSE, color = "red", linetype = "dashed") + 
+  scale_fill_brewer(palette = "Set2") +  
+  labs(
+    title = "Growth vs. Governance by Regions",
+    x = "Governance",
+    y = "GDP per capita"
+  ) +
+  facet_wrap(~Continent, scales = "free") + 
+  #theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    strip.text = element_text(size = 12, face = "bold"),  
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    legend.position = "none" 
+  )
+
+#Plot the relationship between HDI and Governance across regions
+ggplot(Ins_Cs, aes(x = Governance, y = HDI, fill = Continent)) +
+  geom_point(shape = 21, size = 3, color = "black", stroke = 0.5, alpha = 0.7) +  
+  geom_smooth(method = "lm", se = FALSE, color = "red", linetype = "dashed") + 
+  scale_fill_brewer(palette = "Set2") +  
+  labs(
+    title = "HDI vs. Governance by Regions",
+    x = "Governance",
+    y = "Human Development Index (HDI)"
+  ) +
+  facet_wrap(~Continent, scales = "free") + 
+  #theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    strip.text = element_text(size = 12, face = "bold"),  
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    legend.position = "none" 
+  )
+
+#Plot the relationship between Main Development Variables and Economic Freedom
+#Add 3 main dependent variables into pivot_longer frame
+Dependent_Variables <- Ins_Cs %>%
+  pivot_longer(
+    cols = c(GDP.Capita, Poverty.Headcount, HDI), 
+    names_to = "Variable",                        
+    values_to = "Value"                          
+  )
+
+#Plot
+ggplot(Dependent_Variables, aes(x = Econ.Freedom, y = Value)) +
+  geom_point(alpha = 0.7) +  
+  geom_smooth(method = "lm", se = FALSE, color = "blue") + 
+  facet_wrap(~Variable, scales = "free_y", nrow = 1) +  
+  labs(
+    title = "Main Development Variables vs. Economic Freedom",
+    x = "Economic Freedom",
+    y = "Value"
+  ) +
+  theme_wsj() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    strip.text = element_text(size = 12, face = "bold"),  
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+```
+
+```{r Correlation Plot}
+#Correlation Plot
+Data_Cor <- Ins_Cs %>% 
+  select(Poverty.Headcount, GDP.Capita, HDI,
+         Gov.Expense, Population, Landlocked, Area, 
+         Governance, Econ.Freedom) 
+Numeric_Data <- Data_Cor[, sapply(Data_Cor, is.numeric)] #ensure all are numeric
+
+Correlation <-  cor(Numeric_Data) #conduct correlation analysis 
+
+ggpairs(Numeric_Data) + 
+  labs(title = "Correlation Analysis") + 
+  theme_gray() + 
+    theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    strip.text = element_text(size = 8),   
+    axis.text = element_text(size = 8),  
+    axis.title = element_text(size = 8),  
+    legend.text = element_text(size = 8),  
+    legend.title = element_text(size = 8)  
+  )
+```
+
+#Data Analysis 
+```{r Importing Data}
+#Import the panel dataset 
+Ins_Panel <- read.csv(file="./Data /Processed /Combined_dropNA.csv",
+                     stringsAsFactors = TRUE) %>%
+  mutate(across(c(Year, Population, Area, Landlocked), as.numeric)) 
+
+#Import the cross-sectional dataset 
+Ins_Cs <- read.csv(file="./Data /Processed /Ins_Cs.csv",
+                     stringsAsFactors = TRUE) %>%
+  mutate(across(c(Area, Landlocked), as.numeric)) 
+```
+
+```{r Linear Model}
+#Poverty Headcount 
+#Run the linear model
+LM_Poverty <- lm(data = Ins_Panel,
+             Poverty.Headcount ~ 
+               lag(Gov.Expense) + log(Population) + Landlocked + log(Area) + 
+               Governance + Econ.Freedom)
+
+#Produce summary
+#summary(LM_Poverty) #produce summary regression outputs
+summ(LM_Poverty, digits = 3) #turn summary regression results to a table
+
+#Conduct Multicollinearity using VIF test 
+vif(LM_Poverty)
+
+#Plot regression results
+par(mfrow=c(2,2),mar=c(4,4,4,4))
+plot(LM_Poverty)
+par(mfrow = c(1,1))
+
+#Growth (GDP per capita)
+#Run the linear model
+LM_Growth <- lm(data = Ins_Panel,
+             log(GDP.Capita) ~ 
+               lag(Gov.Expense) + log(Population) + Landlocked + log(Area) + 
+               Governance + Econ.Freedom)
+
+#Produce summary
+#summary(LM_Growth) #produce summary regression outputs
+summ(LM_Growth, digits = 3) #turn summary regression results to a table
+
+#Plot regression results
+par(mfrow=c(2,2),mar=c(4,4,4,4))
+plot(LM_Growth)
+par(mfrow = c(1,1))
+
+#Development (HDI)
+#Run the linear model
+LM_HDI <- lm(data = Ins_Panel,
+             HDI ~ 
+               lag(Gov.Expense) + log(Population) + Landlocked + log(Area) + 
+               Governance + Econ.Freedom)
+
+#Produce summary
+#summary(LM_HDI) #produce summary regression outputs
+summ(LM_HDI, digits = 3) #turn summary regression results to a table
+
+#Plot regression results
+par(mfrow=c(2,2),mar=c(4,4,4,4))
+plot(LM_HDI)
+par(mfrow = c(1,1))
+
+```
+
+```{r Fixed or Random Effects Model}
+#Poverty
+#Run the fixed effects model 
+FE_Poverty <- plm(data=Ins_Panel,
+                  Poverty.Headcount ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="within")
+
+#Run the random effects model 
+RE_Poverty <- plm(data=Ins_Panel,
+                  Poverty.Headcount ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="random")
+
+#Conduct Hausman Test 
+phtest(FE_Poverty, RE_Poverty)
+
+#Growth (GDP per capita)
+#Run the fixed effects model 
+FE_Growth <- plm(data=Ins_Panel,
+                  log(GDP.Capita) ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="within")
+
+#Run the random effects model 
+RE_Growth <- plm(data=Ins_Panel,
+                  log(GDP.Capita) ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="random")
+
+#Conduct Hausman Test 
+phtest(FE_Growth, RE_Growth)
+
+#Development (HDI)
+#Run the fixed effects model 
+FE_Dev <- plm(data=Ins_Panel,
+                  HDI ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="within")
+
+#Run the random effects model 
+RE_Dev <- plm(data=Ins_Panel,
+                  HDI ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="random")
+
+#Conduct Hausman Test 
+phtest(FE_Dev, RE_Dev)
+
+#Combine regression results in a table 
+stargazer(FE_Poverty, FE_Growth, FE_Dev,
+          type = "html",
+          column.labels = c("Poverty Headcount", "GDP.Capita", "HDI"),
+          title = "Panel Regression Results",
+          digits = 3,
+          single.row = TRUE,
+          header = FALSE)
+
+# Extract fitted values and residuals
+fitted_values <- as.vector(fitted(FE_Dev))
+residuals_values <- as.vector(residuals(FE_Dev))
+
+# Set up the plotting layout for 2x2 grid
+par(mfrow = c(2, 2), mar = c(3, 3, 2, 2))
+
+# Plot 1: Residuals vs Fitted values
+plot(fitted_values, residuals_values,
+     main = "Residuals vs Fitted",
+     xlab = "Fitted Values", ylab = "Residuals",
+     pch = 20, col = "blue")
+abline(h = 0, col = "red") 
+
+# Plot 2: Normal Q-Q plot for residuals
+qqnorm(residuals_values, main = "Normal Q-Q Plot")
+qqline(residuals_values, col = "red")
+
+# Plot 3: Histogram of residuals
+hist(residuals_values, breaks = 30, col = "gray", 
+     main = "Histogram of Residuals", xlab = "Residuals")
+
+# Plot 4: Scale-Location plot (Square root of standardized residuals vs fitted values)
+standardized_residuals <- residuals_values / sd(residuals_values)
+plot(fitted_values, sqrt(abs(standardized_residuals)),
+     main = "Scale-Location",
+     xlab = "Fitted Values", ylab = "Square Root of |Standardized Residuals|",
+     pch = 20, col = "blue")
+```

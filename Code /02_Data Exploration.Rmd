@@ -97,7 +97,7 @@ Summary_Formatted <- Summary %>%
   pivot_longer(everything(), 
                names_to = c("variable", "statistic"), 
                names_sep = "_") %>%
-  pivot_wider(names_from = statistic, values_from = value) %>% 
+  pivot_wider(names_from = statistic, values_from = value) 
 
 Summary_Formatted %>%
   kable("latex", booktabs = TRUE) %>%
@@ -228,7 +228,7 @@ Dependent_Variables <- Ins_Cs %>%
   )
 
 #Plot
-ggplot(Institutions_Long, aes(x = Econ.Freedom, y = Value)) +
+ggplot(Dependent_Variables, aes(x = Econ.Freedom, y = Value)) +
   geom_point(alpha = 0.7) +  
   geom_smooth(method = "lm", se = FALSE, color = "blue") + 
   facet_wrap(~Variable, scales = "free_y", nrow = 1) +  
@@ -251,10 +251,12 @@ ggplot(Institutions_Long, aes(x = Econ.Freedom, y = Value)) +
 Data_Cor <- Ins_Cs %>% 
   select(Poverty.Headcount, GDP.Capita, HDI,
          Gov.Expense, Population, Landlocked, Area, 
-         Governance, Econ.Freedom)
+         Governance, Econ.Freedom) 
+Numeric_Data <- Data_Cor[, sapply(Data_Cor, is.numeric)] #ensure all are numeric
 
-Correlation <-  cor(Data_Cor)
-ggpairs(Data_Cor) + 
+Correlation <-  cor(Numeric_Data)
+
+ggpairs(Numeric_Data) + 
   labs(title = "Correlation Analysis") + 
   theme_gray() + 
     theme(
