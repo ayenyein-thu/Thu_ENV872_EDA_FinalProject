@@ -69,7 +69,7 @@ Geo_Processed <- Geo %>%
          Country = country,
          Continent = continent,
          Area = area,
-         Lanlocked = landlocked,
+         Landlocked = landlocked,
          Lat = lat, Lon = lon) %>% 
   mutate(across(-c(Country.Code, Country, Continent), as.numeric))
 

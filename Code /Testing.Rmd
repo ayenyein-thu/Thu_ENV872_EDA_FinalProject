@@ -22,30 +22,36 @@ library(car)
 library(lmerTest)
 library(leaflet)     
 library(rnaturalearth)  
+library(corrplot)
 library(here)
 ```
 
 ```{r}
-EconIns <- read.csv(
+EconIns <- read.csv (
   file=here("./Data /Raw /FI_EconomicFreedom.csv"),
-  stringsAsFactor = FALSE, 
-  header = TRUE, dec = "."
+  stringsAsFactor = FALSE, header = TRUE, dec = "."
 )
 
 EconIns_Processed <- EconIns %>%
   slice(-c(1:4)) %>% 
   select(X.1:X.4,X.19,X.30,X.39,X.57,X.80) %>%
   rename(Year=X.1,
-         iso3=X.2,
-         country=X.3,
+         Country_Code=X.2,
+         Country=X.3,
          Econ.Freedom=X.4,
          Govt.Size=X.19,
          Legal.Property=X.30,
          Sound.Money=X.39,
-         Trade.Fre=X.57,
+         Trade.Free=X.57,
          Regulation=X.80) %>% 
   mutate(across(-c(iso3, country), as.numeric)) %>% 
   mutate(across(c(iso3, country), as.factor))
+
+# write.csv (
+  EconIns_Processed,
+  file=here("./Data /Processed /EconIns_Processed.csv"),
+  row.names = FALSE
+)
 
 Geo <- read.csv(
   file=here("./Data /Raw /CEPII_GeographicClassification.csv"),
@@ -174,10 +180,14 @@ Combined_CommonYear <- Combined %>%
 
 Combined_dropNA <- Combined_CommonYear %>% 
   drop_na()
-
 ```
 
 ```{r}
+# Without NA 
+Combined_Final <- Combined_dropNA %>% 
+  mutate(Governance = rowMeans(select(., Corruption:Voice.Accountability), na.rm = TRUE)) %>% 
+  mutate(Gov_Expense = health.exp + education.exp)
+
 Institutions <- Combined_dropNA %>% 
   group_by(country) %>%
   summarise(
@@ -189,6 +199,15 @@ Institutions <- Combined_dropNA %>%
   ) %>% 
   select(-Year) %>% 
   select(country,iso3,regional_code,Region,Income.group,continent,everything())
+
+Institutions_Final <- Institutions %>% 
+  mutate(Governance = rowMeans(select(., Corruption:Voice.Accountability), na.rm = TRUE)) %>% 
+  mutate(Gov_Expense = health.exp + education.exp)
+
+# With NA 
+Combined_CommonYear1 <- Combined_CommonYear %>% 
+  mutate(Governance = rowMeans(select(., Corruption:Voice.Accountability), na.rm = TRUE)) %>% 
+  mutate(Gov_Expense = health.exp + education.exp)
 
 Institutions1 <- Combined_CommonYear %>% 
   group_by(country) %>%
@@ -204,9 +223,6 @@ Institutions1 <- Combined_CommonYear %>%
   mutate(Governance = rowMeans(select(., Corruption:Voice.Accountability), na.rm = TRUE)) %>% 
   mutate(Gov_Expense = health.exp + education.exp)
 
-Combined_CommonYear1 <- Combined_CommonYear %>% 
-  mutate(Governance = rowMeans(select(., Corruption:Voice.Accountability), na.rm = TRUE)) %>% 
-  mutate(Gov_Expense = health.exp + education.exp)
 ```
 
 ```{r Summary Statistics}
@@ -235,22 +251,14 @@ Summary_Stat_formatted %>%
   kable("latex", booktabs = TRUE) %>%
   kable_styling(latex_options = c("striped", "hold_position"))
 
-Institutions_Final <- Institutions %>% 
-  mutate(Governance = rowMeans(select(., Corruption:Voice.Accountability), na.rm = TRUE)) %>% 
-  mutate(Gov_Expense = health.exp + education.exp)
-
-Combined_Final <- Combined_dropNA %>% 
-  mutate(Governance = rowMeans(select(., Corruption:Voice.Accountability), na.rm = TRUE)) %>% 
-  mutate(Gov_Expense = health.exp + education.exp)
-
 ```
 
 ```{r}
 options(scipen = 999)
 options(digits = 5)
 
-Regres1 <- lm(data=Institutions_Final,
-             poverty.headcount ~ lag(realGDP) + 
+Regres1 <- lm(data=Combined_Final,
+             HDI ~ 
                lag(Gov_Expense) + 
                log(population) + landlocked + log(area) + 
                Governance + 
@@ -275,31 +283,18 @@ corrplot.mixed(Cor.Select.1, upper = "ellipse")
 ```
 
 ```{r Fixed Effects}
-Regres3 <- plm(data=Combined_Final,
-             log(GDP.capita) ~ 
-               lag(Gov_Expense) + 
-               log(population) + Governance + 
-               Govt.Size + Sound.Money + Trade.Fre + Regulation,
-             index = c("country","Year"),
-             model="within")
-summary(Regres3) 
-
-
+Regres5 <- plm(data=Combined_Final,
+             HDI ~ 
                lag(Gov_Expense) + 
                log(population) + landlocked + log(area) + 
-               Governance + 
-               Econ.Freedom)
-
-Regres3 <- lm(data=Combined_CommonYear1,
-             log(GDP.capita) ~ lag(realGDP) + 
-               lag(Gov_Expense) + 
-               log(population) + Governance + 
-               Govt.Size + Sound.Money + Trade.Fre + Regulation)
-vif(Regres3) 
+               Governance + Econ.Freedom,
+             index = c("country","Year"),
+             model="within")
+summary(Regres5) 
 
 # Extract fitted values and residuals
-fitted_values <- fitted(Regres3)
-residuals_values <- residuals(Regres3)
+fitted_values <- as.vector(fitted(Regres5))
+residuals_values <- as.vector(residuals(Regres5))
 
 # Set up the plotting layout for 2x2 grid
 par(mfrow = c(2, 2), mar = c(3, 3, 2, 2))
@@ -328,17 +323,17 @@ plot(fitted_values, sqrt(abs(standardized_residuals)),
 ```
 
 ```{r Regional Comparison}
-Regres2 <- Institutions_Final %>%
+Regres2 <- Combined_Final %>%
   filter(continent %in% c("Africa", "Asia")) %>%
-  lm(formula = poverty.headcount ~ lag(realGDP) + 
+  lm(formula = log(GDP.capita) ~  
        lag(Gov_Expense) + log(population) + landlocked + log(area) + 
        Governance + Econ.Freedom, 
      data = .)
 summary(Regres2)
 
-Regres4 <- Institutions_Final %>%
+Regres4 <- Combined_Final %>%
   filter(continent %in% c("America", "Europe", "Pacific")) %>%
-  lm(formula = poverty.headcount ~ lag(realGDP) + 
+  lm(formula = log(GDP.capita) ~  
        lag(Gov_Expense) + log(population) + landlocked + log(area) + 
        Governance + Econ.Freedom, 
      data = .)
@@ -355,7 +350,7 @@ Institutions_Final %>%
 world <- ne_countries(returnclass = "sf")
 
 map_data <- world %>%
-  left_join(Institutions1, by = c("name" = "country"))
+  left_join(Institutions_Final, by = c("name" = "country"))
 
 pal <- colorNumeric(palette = "RdYlBu", domain = map_data$Econ.Freedom)
 
@@ -380,7 +375,7 @@ leaflet(map_data) %>%
 world <- ne_countries(returnclass = "sf")
 
 map_data <- world %>%
-  left_join(Institutions1, by = c("name" = "country"))
+  left_join(Institutions_Final, by = c("name" = "country"))
 
 pal <- colorNumeric(palette = "YlGnBu", domain = map_data$Governance)
 
@@ -401,16 +396,7 @@ leaflet(map_data) %>%
     opacity = 0.7
   )
 
-ggplot(Institutions_Final, aes(x = Governance, y = HDI, fill = Region)) +
-  geom_point(shape = 21, size = 3, color = "black", stroke = 0.5) +  # Plot points with borders
-  labs(
-    title = "HDI vs. Governance by Region",
-    x = "Governance",
-    y = "HDI"
-  ) +
-  theme_minimal() +
-  theme(legend.position = "right") 
-
+# Institutions Wise
 ggplot(Institutions_Final, aes(x = Governance, y = poverty.headcount, fill = continent)) +
   geom_point(shape = 21, size = 3, color = "black", stroke = 0.5, alpha = 0.7) +  # Points with transparency
   geom_smooth(method = "lm", se = FALSE, color = "red", linetype = "dashed") +  # Add linear regression lines
@@ -429,5 +415,27 @@ ggplot(Institutions_Final, aes(x = Governance, y = poverty.headcount, fill = con
     legend.position = "none"  # Remove legend for clarity in faceted plots
   )
 
+# Main Variables
+Institutions_Long <- Institutions_Final %>%
+  pivot_longer(
+    cols = c(GDP.capita, poverty.headcount, HDI),  # Variables to plot on the y-axis
+    names_to = "Variable",                        # Name of the new variable column
+    values_to = "Value"                           # Name of the new value column
+  )
+ggplot(Institutions_Long, aes(x = Econ.Freedom, y = Value)) +
+  geom_point(alpha = 0.7) +  # Scatter plot with transparency
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +  # Add linear regression line
+  facet_wrap(~Variable, scales = "free_y", ncol = 1) +  # Facet for each variable
+  labs(
+    title = "Relationship Between Governance and Selected Variables",
+    x = "Governance",
+    y = "Value"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 12),  # Adjust facet title size
+    plot.title = element_text(size = 16, hjust = 0.5),  # Center and size the plot title
+    axis.title = element_text(size = 12)  # Adjust axis titles
+  )
 ```
 
