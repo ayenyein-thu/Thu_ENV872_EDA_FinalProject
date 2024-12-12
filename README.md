@@ -8,7 +8,7 @@ This repository contains the study submitted to fulfill the requirements of the 
 
 ## Investigator
 
--   Aye Nyein Thu, [ayenyein.thu\@duke.edu](mailto:ayenyein.thu@duke.edu){.email}
+-   Aye Nyein Thu, [ayenyein.thu\@duke.edu]
 
 ## Keywords
 
@@ -19,7 +19,7 @@ Institutions, Governance, Economic Freedom, Poverty, Growth, Development
 All the data were accessed between 16th and 19th November 2024 from the below-mentioned data sources. All the downloaded datasets are uploaded in the Data/Raw folder with making any. The dataset processed and updated by the author are saved in the Data/Processed folder.
 
 | Variable Names                                               | Column Names      | Units                                             | Data Sources                                       |
-|---------------------|----------------|------------------|-------------------|
+|-------------------|------------------|------------------|------------------|
 | Poverty Headcount                                            | Poverty.Headcount | \% of Population                                  | World Bank's Poverty and Inequality Platform (PIP) |
 | Human Development Index                                      | HDI               | Score ranging from 0 (lowest) to 1 (highest)      | United Nations Development Programme (UNDP)        |
 | Gross Domestic Product (GDP) per capita (Constant 2015 US\$) | GDP.Capita        | USD                                               | World Bank's World Development Indicators (WDI)    |
