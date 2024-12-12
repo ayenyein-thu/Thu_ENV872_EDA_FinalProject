@@ -47,7 +47,7 @@ theme_set(mytheme)
 ```
 
 #Data Wrangling
-```{r Data Importing and Initial Wrangling, include=FALSE, warning=FALSE}
+```{r importing raw datasets & initial cleaning, include=FALSE, warning=FALSE}
 #Raw Data 1: Fraser Institute's Economic Freedom Index 
 #Import data
 EconIns <- read.csv (file = here("./Data /Raw /FI_EconomicFreedom.csv"),
@@ -220,7 +220,7 @@ write.csv(WDI_Processed,
           row.names = FALSE)
 ```
 
-```{r Family Data Wrangling, include=FALSE, warning=FALSE}
+```{r family data wrangling, include=FALSE, warning=FALSE}
 #Combine 7 processed datasets 
 Combined <- WBPIP_Processed %>% 
   left_join(HDI_Processed, by=c("Country.Code","Year")) %>% 
@@ -262,7 +262,7 @@ write.csv(Combined_dropNA,
           row.names = FALSE)
 ```
 
-#Data Wrangling
+#Data Exploration
 ```{r Loading Data and Initial Data Exploration, warning=FALSE, message=FALSE}
 #Import cleaned data without NA excluded
 Ins_CommonYear <- read.csv(file="./Data /Processed /Combined_CommonYear.csv",
@@ -313,7 +313,7 @@ Summary <- Ins_Panel %>%
     se = ~sd(., na.rm = TRUE) / sqrt(sum(!is.na(.)))
   )))
 
-#Format the summary statistics in a 
+#Format the summary statistics
 Summary_Formatted <- Summary %>%
   pivot_longer(everything(), 
                names_to = c("variable", "statistic"), 

@@ -1,0 +1,604 @@
+---
+title: "The Impact of Institutions on Economic Growth, Development and Poverty"
+author: "Aye Nyein Thu"
+date: "2024-12-10"
+subtitle: "https://github.com/ayenyein-thu/Thu_ENV872_EDA_FinalProject"
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    fig_caption: true
+---
+\newpage
+\tableofcontents 
+\newpage
+
+## List of Tables 
+- Table \@ref(tab:table1): Summary of Variables under Study
+- Table \@ref(tab:table2): Descriptive Stats
+
+## List of Figures
+
+```{r global options, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r setup, include=FALSE}
+# Set working directory
+getwd()
+
+# Load packages
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(tidyr)
+library(psych) #install.packages("psych") if not installed yet
+library(knitr)
+library(kableExtra)
+library(plm)
+library(car)
+library(lmerTest)
+library(leaflet)     
+library(rnaturalearth)  
+library(corrplot)
+library(ggridges)
+library(viridis)
+library(RColorBrewer)
+library(colormap)
+library(ggthemes)
+library(jtools) #install.packages("jtools") if not installed yet
+library(ggcorrplot) #install.packages("ggcorrplot") if not installed yet
+library(GGally)
+library(stargazer)
+library(here)
+
+# Set your ggplot theme
+mytheme <- theme_classic() + 
+  theme(
+    axis.text = element_text(color = "black"),
+    legend.position = "top",
+  )
+theme_set(mytheme)
+```
+
+```{r importing processed datasets, include=FALSE}
+#Dataset 1: Fraser Institute's Economic Freedom Index 
+EconIns_Processed <- read.csv (
+  file = here("./Data /Processed /EconIns_Processed.csv"),
+  stringsAsFactor = TRUE) 
+
+#Dataset 2: CEPII's Geographic Data
+Geo_Processed <- read.csv (
+  file = here("./Data /Processed /Geo_Processed.csv"),
+  stringsAsFactor = TRUE) 
+
+#Dataset 3: World Bank's World Governance Indicators 
+Gov_Processed <- read.csv (
+  file = here("./Data /Processed /Gov_Processed.csv"),
+  stringsAsFactor = TRUE) 
+
+#Dataset 4: UNDP's Human Development Indicators (HDI)
+HDI_Processed <- read.csv (
+  file = here("./Data /Processed /HDI_Processed.csv"),
+  stringsAsFactor = TRUE) 
+
+#Dataset 5: World Bank's Income Classification
+WBClassify_Processed <- read.csv (
+  file = here("./Data /Processed /WBClassify_Processed.csv"),
+  stringsAsFactor = TRUE) 
+
+#Dataset 6: World Bank's Poverty and Inequality Platform (PIP)
+WBPIP_Processed <- read.csv (
+  file = here("./Data /Processed /WBPIP_Processed.csv"),
+  stringsAsFactor = TRUE) 
+
+#Dataset 7: World Development Indicators
+WDI_Processed <- read.csv (
+  file = here("./Data /Processed /WDI_Processed.csv"),
+  stringsAsFactor = TRUE) 
+```
+
+```{r family data wrangling, include=FALSE}
+#Combine 7 processed datasets 
+Combined <- WBPIP_Processed %>% 
+  left_join(HDI_Processed, by=c("Country.Code","Year")) %>% 
+  left_join(WDI_Processed, by=c("Country.Code","Year")) %>%
+  left_join(Gov_Processed, by=c("Country.Code","Year")) %>%
+  left_join(EconIns_Processed, by=c("Country.Code","Year")) %>%
+  left_join(Geo_Processed, by=c("Country.Code")) %>%
+  left_join(WBClassify_Processed, by=c("Country.Code")) %>%
+  select (-Country.y,-Country.x.x,-Country.y.y,-Country.x.x.x,
+          -Country.y.y.y,-Country) %>%
+  rename (Country=Country.x) %>% 
+  mutate(
+    Governance = rowMeans(select(., Corruption:Voice.Accountability), 
+                          na.rm = TRUE), #find the mean of governance indicators
+  Gov.Expense = Health.Exp + Education.Exp) %>% #add governance expenditure
+  select(Country:Year,Regional.Code,Region,Continent,
+         Income.Group,Poverty.Headcount:Trade.Open,Gov.Expense,
+         Health.Exp:Population,Governance,Corruption:Lon) 
+
+#Filter the common years for all dataset 
+Combined_CommonYear <- Combined %>% 
+  filter(Year >= 1996 & Year <= 2021) 
+
+#Drop all N/A values 
+Combined_dropNA <- Combined_CommonYear %>% 
+  drop_na()
+```
+
+```{r combined dataset in panel & cross-sectional formats, include=FALSE}
+#Import cleaned data without NA excluded
+Ins_CommonYear <- Combined_CommonYear %>%
+  mutate(across(c(Year, Population, Area, Landlocked), as.numeric))
+
+#Import cleaned data with NA excluded
+Ins_Panel <- Combined_dropNA %>%
+  mutate(across(c(Year, Population, Area, Landlocked), as.numeric)) 
+
+#Change to Cross-sectional data by taking yearly average
+Ins_Cs <- Ins_Panel %>%
+  group_by(Country, Country.Code) %>%
+  summarise(
+    across(where(is.numeric), mean, na.rm = TRUE), #return mean for numeric
+    across(where(is.factor), ~ first(.)), #return first value for factor
+  ) %>% 
+  select(-Year) %>% #remove year as it is no longer relevant
+  select(Country,Country.Code,
+         Regional.Code:Income.Group,everything()) #rearrange columns 
+```
+
+# Rationale and Research Questions
+The question of what determines the prosperity of a country has long been central to the study of development economics. While some nations have achieved high levels of development, others remain impoverished. Despite substantial progress in poverty reduction, 692 million people worldwide are still living below the $2.15 per day poverty line in 2024 (World Bank, 2024). Understanding the factors that drive prosperity could help nations escape the poverty trap.
+
+Several hypotheses have been developed to address the above-mentioned question of why income levels vary across countries. The 2024 Nobel laureates in economic sciences, Acemoglu and Robinson (2012), emphasized that cultural views, geographic disparities, and nations with elites and policymakers that lack knowledge on how to foster prosperity are insufficient presumptions. They assert that inclusive political and economic institutions are key drivers for sustaining growth. North (1981), another Nobel-winning institutional economist, defined intuitions as “a set of rules, compliance procedures, and moral and ethical behavioral norms designed to constrain the behavior of individuals in the interests of maximizing the wealth or utility of principals.”
+
+Institutions are important to understand as they could shape the incentives of different economic actors in a country and influence the economic transactions (Tashtamirov, 2023). Several organizations use different indexes to quantify institutions and touch upon the aspects of rules and regulations, property rights, corruption, freedom of expression, and political rights (Lam, 2010). This study will investigate how political and economic institutions impact poverty, growth, and development across 133 countries from 2000 to 2021. Using linear and fixed effects regression models, the study will address the following research questions:
+
+1.  Does the quality of institutions reduce poverty? 
+2.  Does the quality of institutions increase economic growth and development? 
+3.  How does the impact of institutions on development and poverty vary when accounting for differences between countries and over time?
+
+\newpage
+
+# Dataset Information
+The data required for the study are compiled from seven different secondary sources. The dependent variables are poverty headcount ratio, Gross Domestic Product (GDP) per capita, and Human Development Index (HDI), and they represent poverty, growth, and development, respectively. The two main explanatory variables are governance and economic freedom. Governance is used as a proxy for political institutions, while economic freedom serves as a proxy for economic institutions. Additional control variables include government expenditure, population size, landlocked status, and geographical area. Table \@ref(tab:table1) below provides a brief description of all variables utilized in the study.
+
+```{r table1}
+VNames <- c("Poverty Headcount", "Human Development Index", 
+          "Gross Domestic Product (GDP) per capita (Constant 2015 US$)", 
+          "Governance", "Economic Freedom", "Government Expenditure",
+          "Population", "Landlocked","Area")
+
+CNames <- c("Poverty.Headcount", "HDI", "GDP.Capita", "Governance", 
+            "Econ.Freedom", "Gov.Expense", "Population", "Landlocked","Area")
+
+Units <- c("% of Population", "Score ranging from 0 (lowest) to 1 (highest)",
+           "USD", "Score ranging from -2.5 (lowest) to 2.5 (highest)", 
+           "Score ranging from 0 (lowest) to 10 (highest)", "% of GDP", 
+           "No. of People", "0(not landlocked) or 1 (landlocked)", 
+           "Square kilometers") 
+
+Sources <- c("World Bank's Poverty and Inequality Platform (PIP)",
+             "United Nations Development Programme (UNDP)",
+             "World Bank's World Development Indicators (WDI)",
+             "World Bank's Worldwide Governance Indicators",
+             "Fraser Institute (FI)",
+             "World Bank's World Development Indicators (WDI)",
+             "World Bank's World Development Indicators (WDI)",
+             "CEPII",
+             "CEPII")
+
+Definition <- c("% of people residing in households with consumption or income per individual falling below the international poverty threshold in 2017",
+                "HDI is a development index that combines 3 key indicators: [1] Health by life expectany, [2]Education by total schooling years and [3] Standards of living by GNI per capita.",
+                "GDP is the total value additions of producers residing in the nations. It adds product taxes and deducts subsidies.",
+                "Governance indicators are composed of 6 dimensions: [1] Voice and Accountability; [2] Political Stability and Absence of Violence/ Terrorism; [3] Government Effectiveness; [4] Regulatory Quality; [5] Rule of Law; and [6] Control of Corruption. The study aggregates these 6 dimensions as Governance Indicators by finding average.",
+                "The Economic Freedom Index by Fraser Institute measures how much economic freedom a country has by using 5 different areas: [1] Size of Government; [2] Legal System and Security of Property Rights; [3] Sound Money; [4] Freedom to Trade Internationally; [5] Regulation.",
+                "The study combines total government expenditure on education and current health expenditure to define as Government Expenditure.",
+                "Total population based on estimates of national population censuses, fertility, mortality and migration",
+                "It represents the geographic condition if a country is landlocked or not.",
+                "It represents the geographic area of a country in square kilometers.")
+
+datast <- data.frame(VNames, CNames, Units, Sources, Definition)
+colnames(datast) <- c("Variable Names", "Column Names", "Units","Sources",
+                      "Definition")
+  
+knitr::kable(datast, caption ="Summary of Variables under Study")
+
+```
+
+# Data Wrangling
+The data assessed from various sources are first cleaned and complied in a panel data format. As described in the table, the governance indicators have six individual dimensions, which are combined into a single Governance index by calculating the row means. Similarly, for the economic freedom variables, only the aggregated "Economic Freedom" index is used to represent economic institutions. This approach helps avoid multicollinearity issues that may arise from using individual variables. 
+
+Further, health and education expenditures are are aggregated to represent government expenditures. Among different types of government expenditures, health and education are used to allow for a more targeted analysis of factors closely linked to long-term growth. Then, the common years for all datasets are filtered from the combined data set. Missing values are removed from the dataset rather than interpolated. This approach is chosen because interpolating missing data across different sources could introduce inaccuracies. After the data wrangling process, the final dataset covers 133 countries over the period from 2000 to 2021. Table \@ref(tab:table2) provides a summary of the descriptive statistics for the key variables included in the study. 
+
+```{r table2}
+#Find summary statistics of variables used 
+Summary <- Ins_Panel %>% 
+  select(Poverty.Headcount,GDP.Capita,HDI,
+         Gov.Expense,Population,Area,
+         Governance,Econ.Freedom) %>% 
+  summarise(across(everything(), list(
+    count = ~sum(!is.na(.)),
+    mean = ~mean(., na.rm = TRUE),
+    sd = ~sd(., na.rm = TRUE),
+    min = ~min(., na.rm = TRUE),
+    max = ~max(., na.rm = TRUE),
+    range = ~diff(range(., na.rm = TRUE)),
+    se = ~sd(., na.rm = TRUE) / sqrt(sum(!is.na(.)))
+  )))
+
+#Format the summary statistics 
+Summary_Formatted <- Summary %>%
+  pivot_longer(everything(), 
+               names_to = c("variable", "statistic"), 
+               names_sep = "_") %>%
+  pivot_wider(names_from = statistic, values_from = value) 
+
+#Remove scientific notion
+options(scipen = 10) 
+
+#Create table
+Summary_Formatted %>%
+  kable("html", booktabs = TRUE, caption = "Descriptive Statistics",
+        digits = 2) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), 
+                full_width = FALSE)
+```
+
+\newpage
+
+# Exploratory Analysis 
+Following the summary statistics, the maps presented below illustrate the quality or strength of political and economic institutions across the countries in the study. As depicted in the figures, the institutions tend to be stronger in countries such as the United States, Canada, Australia, and many nations in Europe, while some countries in Asia and Africa exhibit considerably weaker institutions.
+
+When the relationship between political institutions (proxied by governance) and the dependent variables (poverty, growth, and development) is visualized across regions, the results consistently suggest that stronger political institutions are associated with lower poverty levels and enhanced growth and development. Similarly, when the dependent variables are plotted against economic institutions (represented by the Economic Freedom index), the data indicate that higher economic freedom is correlated with lower poverty rates and higher levels of growth and development.
+
+```{r overview of institutions, echo=FALSE}
+#Overview of Governance in the countries under study
+#Retrieve world geographic data and change to sf format 
+World <- ne_countries(returnclass = "sf") 
+
+#Join the cleaned data with geographic data by country code 
+Map_Data <- World %>%
+  left_join(Ins_Cs, by = c("iso_a3" = "Country.Code"))
+
+#Set the color palette 
+Pal.Gov <- colorNumeric(palette = "RdYlBu", domain = Map_Data$Governance)
+
+#Plot Governance of the countries under study
+leaflet(Map_Data) %>%
+  addTiles() %>% 
+  addPolygons(
+    fillColor = ~Pal.Gov(Governance),  
+    fillOpacity = 0.7,
+    color = "white",
+    weight = 1,
+    popup = ~paste(name, "<br>Governance: ", Governance) 
+  ) %>%
+  addLegend(
+    position = "bottomright",
+    pal = Pal.Gov, 
+    values = ~Governance,
+    title = "Governance",
+    opacity = 0.7
+  )
+
+#Overview of Economic Freedom in the Countries under Study
+#Set the color palette 
+Pal.Econ <- colorNumeric(palette = "YlGnBu", domain = Map_Data$Econ.Freedom)
+
+#Plot Economic Freedom of the countries under study
+leaflet(Map_Data) %>%
+  addTiles() %>% 
+  addPolygons(
+    fillColor = ~Pal.Econ(Econ.Freedom),  
+    fillOpacity = 0.7,
+    color = "white",
+    weight = 1,
+    popup = ~paste(name, "<br>Econ.Freedom: ", Econ.Freedom) 
+  ) %>%
+  addLegend(
+    position = "bottomright",
+    pal = Pal.Econ,  
+    values = ~Econ.Freedom,
+    title = "Economic Freedom",
+    opacity = 0.7
+  )
+```
+
+```{r relationship of main variables, echo=FALSE}
+#Plot the relationship between Poverty and Governance across regions
+ggplot(Ins_Cs, aes(x = Governance, y = Poverty.Headcount, fill = Continent)) +
+  geom_point(shape = 21, size = 3, color = "black", stroke = 0.5, alpha = 0.7) +  
+  geom_smooth(method = "lm", se = FALSE, color = "red", linetype = "dashed") + 
+  scale_fill_brewer(palette = "Set2") +  
+  labs(
+    title = "Poverty vs. Governance by Regions",
+    x = "Governance",
+    y = "Poverty Headcount"
+  ) +
+  facet_wrap(~Continent, scales = "free") + 
+  #theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    strip.text = element_text(size = 12, face = "bold"),  
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    legend.position = "none" 
+  )
+
+#Plot the relationship between Growth and Governance across regions
+ggplot(Ins_Cs, aes(x = Governance, y = GDP.Capita, fill = Continent)) +
+  geom_point(shape = 21, size = 3, color = "black", stroke = 0.5, alpha = 0.7) +  
+  geom_smooth(method = "lm", se = FALSE, color = "red", linetype = "dashed") + 
+  scale_fill_brewer(palette = "Set2") +  
+  labs(
+    title = "Growth vs. Governance by Regions",
+    x = "Governance",
+    y = "GDP per capita"
+  ) +
+  facet_wrap(~Continent, scales = "free") + 
+  #theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    strip.text = element_text(size = 12, face = "bold"),  
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    legend.position = "none" 
+  )
+
+#Plot the relationship between HDI and Governance across regions
+ggplot(Ins_Cs, aes(x = Governance, y = HDI, fill = Continent)) +
+  geom_point(shape = 21, size = 3, color = "black", stroke = 0.5, alpha = 0.7) +  
+  geom_smooth(method = "lm", se = FALSE, color = "red", linetype = "dashed") + 
+  scale_fill_brewer(palette = "Set2") +  
+  labs(
+    title = "HDI vs. Governance by Regions",
+    x = "Governance",
+    y = "Human Development Index (HDI)"
+  ) +
+  facet_wrap(~Continent, scales = "free") + 
+  #theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    strip.text = element_text(size = 12, face = "bold"),  
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    legend.position = "none" 
+  )
+
+#Plot the relationship between Main Development Variables and Economic Freedom
+#Add 3 main dependent variables into pivot_longer frame
+Dependent_Variables <- Ins_Cs %>%
+  pivot_longer(
+    cols = c(GDP.Capita, Poverty.Headcount, HDI), 
+    names_to = "Variable",                        
+    values_to = "Value"                          
+  )
+
+#Plot
+ggplot(Dependent_Variables, aes(x = Econ.Freedom, y = Value)) +
+  geom_point(alpha = 0.7) +  
+  geom_smooth(method = "lm", se = FALSE, color = "blue") + 
+  facet_wrap(~Variable, scales = "free_y", nrow = 1) +  
+  labs(
+    title = "Main Development Variables vs. Economic Freedom",
+    x = "Economic Freedom",
+    y = "Value"
+  ) +
+  theme_wsj() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    strip.text = element_text(size = 12, face = "bold"),  
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+```
+
+```{r correlation plot}
+#Correlation Plot
+Data_Cor <- Ins_Cs %>% 
+  select(Poverty.Headcount, GDP.Capita, HDI,
+         Gov.Expense, Population, Landlocked, Area, 
+         Governance, Econ.Freedom) 
+Numeric_Data <- Data_Cor[, sapply(Data_Cor, is.numeric)] #ensure all are numeric
+
+Correlation <-  cor(Numeric_Data) #conduct correlation analysis 
+
+ggpairs(Numeric_Data) + 
+  labs(title = "Correlation Analysis") + 
+  theme_gray() + 
+    theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    strip.text = element_text(size = 8),   
+    axis.text = element_text(size = 8),  
+    axis.title = element_text(size = 8),  
+    legend.text = element_text(size = 8),  
+    legend.title = element_text(size = 8)  
+  )
+```
+\newpage
+
+# Analysis
+The data is analyzed by using a linear model or pooled Ordinary Least Square (OLS) model and a panel regression model. The pooled OLS model estimates the simple linear relationship between variables. However, in the institution-development setting, the OLS results can be biased and inconsistent if the effects of entities and time are present in the dataset. As noted by Studenmund (2017), fixed effects and random effects models are commonly used and are considered essential tools for panel data analysis. The fixed effects and random effects models account for unobserved heterogeneity in the data, thereby improving the estimation of the model (Wooldridge, 2010).
+
+In this study, fixed effects and random effects regressions are conducted for each dependent variable. Then, the Hausman test is used to determine if the fixed or random effects model is more appropriate.
+
+## Question 1: Does the quality of institutions reduce poverty?
+**Null Hypothesis 1**: Political and economic institutions do not have any effect on poverty. 
+**Alternative Hypothesis 1**: Political and economic institutions have effect on poverty.
+
+```{r lm model poverty vs institutions}
+#Poverty Headcount 
+#Run the linear model
+LM_Poverty <- lm(data = Ins_Panel,
+             Poverty.Headcount ~ 
+               lag(Gov.Expense) + log(Population) + Landlocked + log(Area) + 
+               Governance + Econ.Freedom)
+
+#Produce summary
+#summary(LM_Poverty) #produce summary regression outputs
+summ(LM_Poverty, digits = 3) #turn summary regression results to a table
+
+#Plot regression results
+par(mfrow=c(2,2),mar=c(4,4,4,4))
+plot(LM_Poverty)
+par(mfrow = c(1,1))
+
+#Conduct Multicollinearity using VIF test 
+vif(LM_Poverty)
+```
+
+The results indicate that economic institutions have a positive effect on reducing the poverty headcount ratio , with the effect being statistically significant at the 99% confidence level.  However, the impact of political institutions (proxied by governance) is less pronounced but still statistically significant at the 90% level.
+
+Further, a variance inflation factor (VIF) test results indicate that there is less likely to exhibit multicollinearity between variables as all the values are lower than 5.  
+\newpage
+
+## Question 2: Does the quality of institutions increase economic growth and development?
+**Null Hypothesis 2a**: Political and economic institutions do not have any effect on economic growth.  
+**Alternative Hypothesis 2a**: Political and economic institutions have effect on economic growth. 
+
+```{r lm model growth vs institutions}
+#Growth (GDP per capita)
+#Run the linear model
+LM_Growth <- lm(data = Ins_Panel,
+             log(GDP.Capita) ~ 
+               lag(Gov.Expense) + log(Population) + Landlocked + log(Area) + 
+               Governance + Econ.Freedom)
+
+#Produce summary
+#summary(LM_Growth) #produce summary regression outputs
+summ(LM_Growth, digits = 3) #turn summary regression results to a table
+
+#Plot regression results
+par(mfrow=c(2,2),mar=c(4,4,4,4))
+plot(LM_Growth)
+par(mfrow = c(1,1))
+```
+
+According to the linear regression results, both governance and economic freedom are positively and significantly related to economic growth.
+\newpage
+
+**Null Hypothesis 2b**: Political and economic institutions do not have any effect on economic growth.  
+**Alternative Hypothesis 2b**: Political and economic institutions have effect on economic growth. 
+
+```{r lm model development vs institutions}
+#Development (HDI)
+#Run the linear model
+LM_HDI <- lm(data = Ins_Panel,
+             HDI ~ 
+               lag(Gov.Expense) + log(Population) + Landlocked + log(Area) + 
+               Governance + Econ.Freedom)
+
+#Produce summary
+#summary(LM_HDI) #produce summary regression outputs
+summ(LM_HDI, digits = 3) #turn summary regression results to a table
+
+#Plot regression results
+par(mfrow=c(2,2),mar=c(4,4,4,4))
+plot(LM_HDI)
+par(mfrow = c(1,1))
+```
+
+Similar to the results for economic growth, the regression analysis for economic development shows that both governance and economic freedom are positively related to development outcomes. These relationships are highly significant, with p-values below 0.001.
+\newpage 
+
+## Question 3: How does the impact of institutions on development and poverty vary when accounting for differences between countries and over time?
+
+After running the Hausman test, all the results consistently indicate that the fixed effects regression is a better fit model. Consequently, the summary of the fixed effects models for all three dependent variables is presented in the below table.
+
+```{r Fixed or Random Effects Model}
+#Poverty
+#Run the fixed effects model 
+FE_Poverty <- plm(data=Ins_Panel,
+                  Poverty.Headcount ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="within")
+
+#Run the random effects model 
+RE_Poverty <- plm(data=Ins_Panel,
+                  Poverty.Headcount ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="random")
+
+#Conduct Hausman Test 
+phtest(FE_Poverty, RE_Poverty)
+
+#Growth (GDP per capita)
+#Run the fixed effects model 
+FE_Growth <- plm(data=Ins_Panel,
+                  log(GDP.Capita) ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="within")
+
+#Run the random effects model 
+RE_Growth <- plm(data=Ins_Panel,
+                  log(GDP.Capita) ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="random")
+
+#Conduct Hausman Test 
+phtest(FE_Growth, RE_Growth)
+
+#Development (HDI)
+#Run the fixed effects model 
+FE_Dev <- plm(data=Ins_Panel,
+                  HDI ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="within")
+
+#Run the random effects model 
+RE_Dev <- plm(data=Ins_Panel,
+                  HDI ~ 
+                    lag(Gov.Expense) + log(Population) + Landlocked + log(Area)+ 
+                    Governance + Econ.Freedom,
+                  index = c("Country","Year"),
+                  model="random")
+
+#Conduct Hausman Test 
+phtest(FE_Dev, RE_Dev)
+
+#Combine regression results in a table 
+stargazer(FE_Poverty, FE_Growth, FE_Dev,
+          type = "html",
+          column.labels = c("Poverty Headcount", "GDP.Capita", "HDI"),
+          title = "Panel Regression Results",
+          digits = 3,
+          single.row = TRUE,
+          header = FALSE)
+```
+
+The fixed effects regression results reveal that, even after controlling for individual country-specific and time-specific heterogeneities, both political institutions (governance) and economic institutions (economic freedom) remain statistically significant and are strongly associated with poverty reduction, economic growth, and development at the p-value 99% level.
+\newpage 
+
+# Summary and Conclusions
+Both linear regression and fixed effects regression results highlight that political and economic institutions are significantly related to poverty, growth, and development. While the relationship between institutions and growth, as well as institutions and development, is highly significant at the 99% confidence level in both the linear and panel regression models, the relationship with poverty is somewhat weaker in the linear regression, showing significance only at the 90% level. These findings align with the claims of institutional economists, including the 2024 Nobel winners: Daron Acemoglu, Simon Henry Roberts Johnson, and James A. Robinson, who underscores the importance of inclusive institutions in shaping long-term development outcomes. 
+
+This study reaffirms the argument that high-quality institutions could enhance the likelihood of promoting economic growth, development and poverty reduction. The study thereby highlights the importance of developing policies that strengthen both political and economic institutions. Developing countries should focus on fostering institutions by combating corruption, ensuring political stability and low level of violence, enhancing public accountabiliity, promoting regulatory environemnt, and safeguarding property rights. 
+
+While presenting the significance of institutions, this study also acknowledges general criticisms on the impact of institutions. Some of these include the complexity of measuring institutions, with current indexes unable to fullly capture; the multi-faceted nature of development, where institutions are only one of many influencing factors; and potential endogeneity issues. 
+
+The study relies on relatively simple statistical tools to estimate the impact of political and economic institutions on poverty, growth, and development. For the further studies, it is suggested to use advanced tools such as the Instrumental Variables (IV)/Two-Stage Least Squares (2SLS) model, the Generalized Method of Moments (GMM), Granger Causality, and nonlinear models to enhance estimation.
+
+\newpage
+
+# References
+1.  Acemoglu, D., & Robinson, J. A. (2012). Why nations fail: the origins of power, prosperity and poverty. Crown Publishers.
+2.  Lam, K. Y. (2011). Institutions and economic development (Doctoral dissertation, University of Birmingham).
+3.  North, D. C. (1981). Structure and Change in Economic History. New York: Norton and Co.
+4.  Studenmund, A. H. (2017). A practical guide to using econometrics. Pearson Higher Education.
+5.  Tashtamirov, M. (2023). The Role of Institutions in Economic Development and Their Impact on Economic Growth in Different Countries. In SHS Web of Conferences (Vol. 172, p. 02005). EDP Sciences.
+6.  Wooldridge, J. M. (2010). Econometric analysis of cross section and panel data. MIT Press.
+7.  World Bank. (2024). Poverty and Inequality Platform (PIP) Platform. Retrieved on 8th December 2024, https://pip.worldbank.org/home 
+
