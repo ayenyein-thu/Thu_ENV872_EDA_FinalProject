@@ -39,11 +39,14 @@ library(here)
 here()
 getwd()
 
-#Set ggplot theme
-mytheme <- theme_classic() + 
+# Set your ggplot theme
+mytheme <- theme_economist() + 
   theme(
-    axis.text = element_text(color = "black"),
-    legend.position = "top",
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+    strip.text = element_text(size = 10, face = "bold"),  
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    legend.position = "none" 
   )
 theme_set(mytheme)
 ```
@@ -72,13 +75,13 @@ LM_Poverty <- lm(data = Ins_Panel,
 #summary(LM_Poverty) #produce summary regression outputs
 summ(LM_Poverty, digits = 3) #turn summary regression results to a table
 
-#Conduct Multicollinearity using VIF test 
-vif(LM_Poverty)
-
 #Plot regression results
 par(mfrow=c(2,2),mar=c(4,4,4,4))
 plot(LM_Poverty)
 par(mfrow = c(1,1))
+
+#Conduct Multicollinearity using VIF test 
+vif(LM_Poverty)
 
 #Growth (GDP per capita)
 #Run the linear model
@@ -183,34 +186,5 @@ stargazer(FE_Poverty, FE_Growth, FE_Dev,
           digits = 3,
           single.row = TRUE,
           header = FALSE)
-
-# Extract fitted values and residuals
-fitted_values <- as.vector(fitted(FE_Dev))
-residuals_values <- as.vector(residuals(FE_Dev))
-
-# Set up the plotting layout for 2x2 grid
-par(mfrow = c(2, 2), mar = c(3, 3, 2, 2))
-
-# Plot 1: Residuals vs Fitted values
-plot(fitted_values, residuals_values,
-     main = "Residuals vs Fitted",
-     xlab = "Fitted Values", ylab = "Residuals",
-     pch = 20, col = "blue")
-abline(h = 0, col = "red") 
-
-# Plot 2: Normal Q-Q plot for residuals
-qqnorm(residuals_values, main = "Normal Q-Q Plot")
-qqline(residuals_values, col = "red")
-
-# Plot 3: Histogram of residuals
-hist(residuals_values, breaks = 30, col = "gray", 
-     main = "Histogram of Residuals", xlab = "Residuals")
-
-# Plot 4: Scale-Location plot (Square root of standardized residuals vs fitted values)
-standardized_residuals <- residuals_values / sd(residuals_values)
-plot(fitted_values, sqrt(abs(standardized_residuals)),
-     main = "Scale-Location",
-     xlab = "Fitted Values", ylab = "Square Root of |Standardized Residuals|",
-     pch = 20, col = "blue")
 ```
 

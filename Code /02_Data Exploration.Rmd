@@ -13,7 +13,7 @@ library(tidyverse)
 library(lubridate)
 library(dplyr)
 library(tidyr)
-library(psych) #install.packages(psych) if not installed yet
+library(psych) #install.packages("psych") if not installed yet
 library(knitr)
 library(kableExtra)
 library(plm)
@@ -27,6 +27,10 @@ library(viridis)
 library(RColorBrewer)
 library(colormap)
 library(ggthemes)
+library(jtools) #install.packages("jtools") if not installed yet
+library(ggcorrplot) #install.packages("ggcorrplot") if not installed yet
+library(GGally)
+library(stargazer)
 library(here)
 
 #Check the working directory
@@ -34,10 +38,13 @@ here()
 getwd()
 
 #Set ggplot theme
-mytheme <- theme_classic() + 
+mytheme <- theme_economist() + 
   theme(
-    axis.text = element_text(color = "black"),
-    legend.position = "top",
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+    strip.text = element_text(size = 10, face = "bold"),  
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    legend.position = "none" 
   )
 theme_set(mytheme)
 ```
@@ -76,7 +83,51 @@ dim(Ins_Cs)
 summary(Ins_Cs)
 ```
 
+```{r Summary Variables}
+VNames <- c("Poverty Headcount", "Human Development Index", 
+          "Gross Domestic Product (GDP) per capita (Constant 2015 US$)", 
+          "Governance", "Economic Freedom", "Government Expenditure",
+          "Population", "Landlocked","Area")
+
+CNames <- c("Poverty.Headcount", "HDI", "GDP.Capita", "Governance", 
+            "Econ.Freedom", "Gov.Expense", "Population", "Landlocked","Area")
+
+Units <- c("% of Population", "Score ranging from 0 (lowest) to 1 (highest)",
+           "USD", "Score ranging from -2.5 (lowest) to 2.5 (highest)", 
+           "Score ranging from 0 (lowest) to 10 (highest)", "% of GDP", 
+           "No. of People", "0(not landlocked) or 1 (landlocked)", 
+           "Square kilometers") 
+
+Sources <- c("World Bank's Poverty and Inequality Platform (PIP)",
+             "United Nations Development Programme (UNDP)",
+             "World Bank's World Development Indicators (WDI)",
+             "World Bank's Worldwide Governance Indicators",
+             "Fraser Institute (FI)",
+             "World Bank's World Development Indicators (WDI)",
+             "World Bank's World Development Indicators (WDI)",
+             "CEPII",
+             "CEPII")
+
+Definition <- c("% of people residing in households with consumption or income per individual falling below the international poverty threshold in 2017",
+                "HDI is a development index that combines 3 key indicators: [1] Health by life expectany, [2]Education by total schooling years and [3] Standards of living by GNI per capita.",
+                "GDP is the total value additions of producers residing in the nations. It adds product taxes and deducts subsidies.",
+                "Governance indicators are composed of 6 dimensions: [1] Voice and Accountability; [2] Political Stability and Absence of Violence/ Terrorism; [3] Government Effectiveness; [4] Regulatory Quality; [5] Rule of Law; and [6] Control of Corruption. The study aggregates these 6 dimensions as Governance Indicators by finding average.",
+                "The Economic Freedom Index by Fraser Institute measures how much economic freedom a country has by using 5 different areas: [1] Size of Government; [2] Legal System and Security of Property Rights; [3] Sound Money; [4] Freedom to Trade Internationally; [5] Regulation.",
+                "The study combines total government expenditure on education and current health expenditure to define as Government Expenditure.",
+                "Total population based on estimates of national population censuses, fertility, mortality and migration",
+                "It represents the geographic condition if a country is landlocked or not.",
+                "It represents the geographic area of a country in square kilometers.")
+
+datast <- data.frame(VNames, CNames, Units, Sources, Definition)
+colnames(datast) <- c("Variable Names", "Column Names", "Units","Sources",
+                      "Definition")
+  
+knitr::kable(datast, caption ="Summary of Variables under Study") 
+
+```
+
 ```{r Summary Statistics}
+options(scipen = 10)
 #Find summary statistics of variables used 
 Summary <- Ins_Panel %>% 
   select(Poverty.Headcount,GDP.Capita,HDI,
@@ -92,7 +143,7 @@ Summary <- Ins_Panel %>%
     se = ~sd(., na.rm = TRUE) / sqrt(sum(!is.na(.)))
   )))
 
-#Format the summary statistics in a 
+#Format the summary statistics 
 Summary_Formatted <- Summary %>%
   pivot_longer(everything(), 
                names_to = c("variable", "statistic"), 
@@ -100,8 +151,10 @@ Summary_Formatted <- Summary %>%
   pivot_wider(names_from = statistic, values_from = value) 
 
 Summary_Formatted %>%
-  kable("latex", booktabs = TRUE) %>%
-  kable_styling(latex_options = c("striped", "hold_position"))
+  kable("html", booktabs = TRUE, caption = "Descriptive Statistics",
+        digits = 2) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), 
+                full_width = FALSE)
 ```
 
 ```{r Overview of Institutions, warning = FALSE, message=FALSE}
@@ -165,18 +218,10 @@ ggplot(Ins_Cs, aes(x = Governance, y = Poverty.Headcount, fill = Continent)) +
   scale_fill_brewer(palette = "Set2") +  
   labs(
     title = "Poverty vs. Governance by Regions",
-    x = "Governance",
-    y = "Poverty Headcount"
+    x = "Governance (scale from -2.5[lowest] to 2.5[highest])",
+    y = "Poverty Headcount (% of population)"
   ) +
-  facet_wrap(~Continent, scales = "free") + 
-  #theme_minimal() +
-  theme(
-    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-    strip.text = element_text(size = 12, face = "bold"),  
-    axis.title = element_text(size = 12),
-    axis.text = element_text(size = 10),
-    legend.position = "none" 
-  )
+  facet_wrap(~Continent, scales = "free")
 
 #Plot the relationship between Growth and Governance across regions
 ggplot(Ins_Cs, aes(x = Governance, y = GDP.Capita, fill = Continent)) +
@@ -185,18 +230,10 @@ ggplot(Ins_Cs, aes(x = Governance, y = GDP.Capita, fill = Continent)) +
   scale_fill_brewer(palette = "Set2") +  
   labs(
     title = "Growth vs. Governance by Regions",
-    x = "Governance",
-    y = "GDP per capita"
+    x = "Governance (scale from -2.5[lowest] to 2.5[highest])",
+    y = "GDP per capita (2015 constant USD)"
   ) +
-  facet_wrap(~Continent, scales = "free") + 
-  #theme_minimal() +
-  theme(
-    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-    strip.text = element_text(size = 12, face = "bold"),  
-    axis.title = element_text(size = 12),
-    axis.text = element_text(size = 10),
-    legend.position = "none" 
-  )
+  facet_wrap(~Continent, scales = "free")
 
 #Plot the relationship between HDI and Governance across regions
 ggplot(Ins_Cs, aes(x = Governance, y = HDI, fill = Continent)) +
@@ -205,18 +242,10 @@ ggplot(Ins_Cs, aes(x = Governance, y = HDI, fill = Continent)) +
   scale_fill_brewer(palette = "Set2") +  
   labs(
     title = "HDI vs. Governance by Regions",
-    x = "Governance",
-    y = "Human Development Index (HDI)"
+    x = "Governance (scale from -2.5[lowest] to 2.5[highest])",
+    y = "Human Development Index (HDI) (scale from 0[lowest] to 1[highest])"
   ) +
-  facet_wrap(~Continent, scales = "free") + 
-  #theme_minimal() +
-  theme(
-    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-    strip.text = element_text(size = 12, face = "bold"),  
-    axis.title = element_text(size = 12),
-    axis.text = element_text(size = 10),
-    legend.position = "none" 
-  )
+  facet_wrap(~Continent, scales = "free") 
 
 #Plot the relationship between Main Development Variables and Economic Freedom
 #Add 3 main dependent variables into pivot_longer frame
@@ -234,15 +263,8 @@ ggplot(Dependent_Variables, aes(x = Econ.Freedom, y = Value)) +
   facet_wrap(~Variable, scales = "free_y", nrow = 1) +  
   labs(
     title = "Main Development Variables vs. Economic Freedom",
-    x = "Economic Freedom",
+    x = "Economic Freedom (scale from 0[lowest] to 10[highest])",
     y = "Value"
-  ) +
-  theme_wsj() +
-  theme(
-    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-    strip.text = element_text(size = 12, face = "bold"),  
-    axis.title = element_text(size = 12),
-    axis.text = element_text(size = 10)
   )
 ```
 
@@ -260,7 +282,7 @@ ggpairs(Numeric_Data) +
   labs(title = "Correlation Analysis") + 
   theme_gray() + 
     theme(
-    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
     strip.text = element_text(size = 8),   
     axis.text = element_text(size = 8),  
     axis.title = element_text(size = 8),  
