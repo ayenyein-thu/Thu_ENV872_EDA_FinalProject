@@ -473,6 +473,7 @@ vif(LM_Poverty)
 The VIF test results suggest that there is less likely to exhibit multicollinearity between variables used in the study, as all values fall below the standard VIF threshold of 5.
 
 <br> 
+
 ## Question 2: Does the quality of institutions increase economic growth and development?
 **Null Hypothesis 2a**: Political and economic institutions do not have any effect on economic growth. <br> 
 **Alternative Hypothesis 2a**: Political and economic institutions have effect on economic growth. 
